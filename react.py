@@ -15,14 +15,10 @@ load_dotenv()
 @tool
 def triple(num: float) -> float:
     """
-    Triple a number
-
-    Args:
-        num (float): _description_
-
-    Returns:
-        float: _description_
+    :param num: a number to triple
+    :return: the number tripled ->  multiplied by 3
     """
+    print("---EXECUTE TRIPLING TOOL---")
     return num * 3
 
 

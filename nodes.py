@@ -22,13 +22,7 @@ def run_agent_reasoning(state: MessagesState) -> MessagesState:
     Run the agent reasoning node
     """
     response = llm.invoke(
-        [
-            {
-                "role": "system",
-                "content": SYSTEM_MESSAGE,
-            },
-            *state.messages,
-        ]
+        [{"role": "system", "content": SYSTEM_MESSAGE}, *state["messages"]]
     )
     return {"messages": [response]}
 
