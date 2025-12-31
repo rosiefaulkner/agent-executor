@@ -2,6 +2,7 @@
 Reasoning engine that decides which tool to call
 """
 
+import asyncio
 import os
 
 from dotenv import load_dotenv
@@ -13,16 +14,18 @@ load_dotenv()
 
 
 @tool
-def triple(num: float) -> float:
+async def triple(num: float) -> float:
     """
     :param num: a number to triple
     :return: the number tripled ->  multiplied by 3
     """
     print("---EXECUTE TRIPLING TOOL---")
+    await asyncio.sleep(0.1)  # Simulate async work
     return num * 3
 
 
-tools = [TavilySearch(max_results=1), triple]
+tavily_tool = TavilySearch(max_results=1)
+tools = [tavily_tool, triple]
 
 # Get API key and ensure it's set
 api_key = os.getenv("GEMINI_API_KEY")

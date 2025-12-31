@@ -1,111 +1,87 @@
-from typing import TypedDict
+import asyncio
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, MessagesState, StateGraph
-from langgraph.checkpoint.sqlite import SqliteSaver
-import sqlite3
+from langgraph.prebuilt import ToolNode
 
-from nodes import handle_tool_error, run_agent_reasoning, tool_node
+from nodes import run_agent_reasoning
+from react import tavily_tool, triple
 
 load_dotenv()
 
 AGENT_REASON = "agent_reason"
-ACT = "act"
-ERROR_HANDLER = "error_handler"
 LAST = -1
 
-conn = sqlite3.connect(database="checkpoints.sqlite", check_same_thread=False)
-memory = SqliteSaver(conn)
 
-
-def should_continue(state: MessagesState) -> str:
-    """
-    If the last message is a tool call because agent decided that
-    a tool execution was required, then we want to execute the tool node.
-    Else, end because the LLM was able to answer the question withput a tool.
-
-    Args:
-        state (MessagesState): message state
-
-    Returns:
-        str: next node to execute in graph
-    """
-    if not getattr(state["messages"][LAST], "tool_calls", None):
-        return END
-    return ACT
+def should_continue(state: MessagesState) -> list[str]:
+    last_message = state["messages"][-1]
+    if not getattr(last_message, "tool_calls", None):
+        return [END]
+    else:
+        return [tool_call["name"] for tool_call in last_message.tool_calls]
 
 
 flow = StateGraph(MessagesState)
 flow.add_node(AGENT_REASON, run_agent_reasoning)
+flow.add_node("tavily_search", ToolNode([tavily_tool]))
+flow.add_node("triple", ToolNode([triple]))
 flow.set_entry_point(AGENT_REASON)
-flow.add_node(ACT, tool_node)
-flow.add_node(ERROR_HANDLER, handle_tool_error)
+flow.add_conditional_edges(
+    AGENT_REASON,
+    should_continue,
+    {"tavily_search": "tavily_search", "triple": "triple", END: END},
+)
+flow.add_edge("tavily_search", AGENT_REASON)
+flow.add_edge("triple", AGENT_REASON)
 
-flow.add_conditional_edges(AGENT_REASON, should_continue, {END: END, ACT: ACT})
-flow.add_edge(ACT, ERROR_HANDLER)
-flow.add_edge(ERROR_HANDLER, AGENT_REASON)
-
-app = flow.compile(checkpointer=memory, interrupt_before=[ACT])
-
-graph = app.get_graph()
-
-if "__interrupt__" in graph.nodes:
-    graph.nodes["human in the loop"] = graph.nodes.pop("__interrupt__")
-    new_edges = set()
-    for source, target in graph.edges:
-        if source == "__interrupt__":
-            source = "human in the loop"
-        if target == "__interrupt__":
-            target = "human in the loop"
-        new_edges.add((source, target))
-    graph.edges = new_edges
-
-    new_conditional_edges = []
-    for source, cond, targets in graph.conditional_edges:
-        new_targets = {}
-        for k, v in targets.items():
-            if v == "__interrupt__":
-                v = "human in the loop"
-            new_targets[k] = v
-        new_conditional_edges.append((source, cond, new_targets))
-    graph.conditional_edges = new_conditional_edges
-
-graph.draw_mermaid_png(output_file_path="flow.png")
+tool_names = [t.name for t in [tavily_tool, triple]]
 
 
-def run_interactive_session(app, thread):
+async def get_app():
     """
-    Runs an interactive session with the agent.
+    Creates and returns the compiled LangGraph app with an async checkpointer.
+    """
+    memory = await AsyncSqliteSaver.acreate(
+        db=":memory:"
+    )  # Using in-memory for simplicity
+    app = flow.compile(checkpointer=memory, interrupt_before=tool_names)
+    return app
+
+
+async def run_interactive_session(app, thread):
+    """
+    Runs an interactive asynchronous session with the agent.
     """
     while True:
-        snapshot = app.get_state(thread)
+        snapshot = await app.aget_state(thread)
         if snapshot.next:
-            user_input = input(
-                f"Do you approve the next step: '{snapshot.next[0]}'? Type 'y' to approve, 'n' to terminate, or provide clarification: "
+            user_input = await asyncio.to_thread(
+                input,
+                f"Do you approve the next step: '{snapshot.next[0]}'? Type 'y' to approve, 'n' to terminate, or provide clarification: ",
             )
             if user_input.strip().lower() == "y":
-                for event in app.stream(None, thread, stream_mode="values"):
+                async for event in app.astream(None, thread, stream_mode="values"):
                     event["messages"][-1].pretty_print()
             elif user_input.strip().lower() == "n":
                 print("---SESSION TERMINATED BY USER---")
-                return  # This will exit the function and the program
+                return
             else:
-                app.update_state(
-                    thread,
+                async for event in app.astream(
                     {"messages": [HumanMessage(content=user_input)]},
-                    as_node=ACT,
-                )
-                for event in app.stream(None, thread, stream_mode="values"):
+                    thread,
+                    stream_mode="values",
+                ):
                     event["messages"][-1].pretty_print()
         else:
-            clarification = input(
-                "Please provide clarification (or type 'exit' to quit): "
+            clarification = await asyncio.to_thread(
+                input, "Please provide clarification (or type 'exit' to quit): "
             )
             if clarification.strip().lower() == "exit":
                 print("---SESSION TERMINATED BY USER---")
                 return
-            for event in app.stream(
+            async for event in app.astream(
                 {"messages": [HumanMessage(content=clarification)]},
                 thread,
                 stream_mode="values",
@@ -113,15 +89,21 @@ def run_interactive_session(app, thread):
                 event["messages"][-1].pretty_print()
 
 
-if __name__ == "__main__":
-    print("---INITIALIZING GRAPH---")
-    thread = {
-        "configurable": {"thread_id": "1"}
-    }  # TODO: update the thread_id to dynamic population rather than hardcoding
+async def main_async():
+    """
+    Main async function to run the agent.
+    """
+    print("---INITIALIZING APP---")
+    app = await get_app()
+    thread = {"configurable": {"thread_id": "1"}}
 
     print("---INVOKING AGENT W HUMAN MESSAGE---")
     initial_input = {"messages": [HumanMessage(content="Hi there")]}
-    for event in app.stream(initial_input, thread, stream_mode="values"):
+    async for event in app.astream(initial_input, thread, stream_mode="values"):
         event["messages"][-1].pretty_print()
 
-    run_interactive_session(app, thread)
+    await run_interactive_session(app, thread)
+
+
+if __name__ == "__main__":
+    asyncio.run(main_async())
