@@ -1,64 +1,53 @@
 # ExecutorAgent using ReAct Design Pattern with LangGraph 🦜🕸️
 
-An advanced AI agent that can reason about its actions and execute tools in a controlled flow, following the ReAct pattern with LangGraph's  graph-based architecture.
+An advanced AI agent that can reason about its actions and execute tools in a controlled flow, following the ReAct pattern with LangGraph's graph-based architecture. This implementation supports parallel execution of tools, human-in-the-loop for verification, and persistent memory.
 
 ```mermaid
 graph TD
     __start__("Start") --> agent_reason("Agent Reasoning")
-    agent_reason --> human_in_the_loop("Human in the Loop")
-    human_in_the_loop --> act("Take Action")
-    act --> agent_reason
-    agent_reason --> __end__("End")
+    subgraph "Human in the Loop"
+        direction LR
+        agent_reason -- "Tool Calls" --> human_in_the_loop("Approve Tools?")
+    end
+    human_in_the_loop -- "Yes" --> tools_parallel("Execute Tools")
+    subgraph "Parallel Tool Execution"
+        direction LR
+        tools_parallel -- "tavily_search" --> tavily_node("Tavily Search")
+        tools_parallel -- "triple" --> triple_node("Triple")
+    end
+    tavily_node --> agent_reason
+    triple_node --> agent_reason
+    agent_reason -- "No Tool Calls" --> __end__("End")
+    human_in_the_loop -- "No / Clarification" --> agent_reason
 ```
 
-## Implementation Details
+## Features
 
-- **ReAct Pattern Implementation**: Builds an agent that can reason about tasks and then act on that reasoning
-- **Graph-Based Control Flow**: Uses LangGraph to create sophisticated control flows for AI agents
-- **Tool Integration**: Builds tools that enable operations / interactions with other services (e.g. web search, RAG search via vector store, etc.)
-- **State Management**: Implements proper state handling for complex agent behavior
+- **ReAct Pattern Implementation**: Builds an agent that can reason about tasks and then act on that reasoning.
+- **Parallel Tool Execution**: The agent can decide to call multiple tools at once, and the graph will execute them in parallel for improved efficiency.
+- **Human in the Loop (HITL)**: Before executing tools, the graph pauses and waits for human approval. This allows for verification and redirection of the agent's actions.
+- **Persistent Memory**: Conversation state is persisted using `AsyncSqliteSaver`, allowing the session to be resumed.
 
-## Human in the Loop
+## How it Works
 
-This agent incorporates a human-in-the-loop (HITL) mechanism for enhanced control and collaboration. This feature allows you to guide and approve the agent's actions before they are taken.
+### 1. Agent Reasoning
+The agent receives the user's prompt and decides whether to respond directly or to use one or more of its available tools.
 
-### How it Works
+### 2. Human in the Loop
+If the agent decides to use tools, the execution is paused. The user is prompted in the command line to approve the tool execution.
+-   Type `y` to allow the agent to proceed.
+-   Type `n` to terminate the session.
+-   Type any other text to provide feedback or clarification. The agent will take this new input into account and re-evaluate its plan.
 
-1.  **Action Approval**: When the agent decides to use a tool, the execution is paused. You will be prompted in the command line to approve the tool execution.
-    -   Type `y` to allow the agent to proceed with the tool call.
-    -   Type any other text to provide feedback or clarification to the agent. The agent will take your input into account for its next step.
+### 3. Parallel Tool Execution
+If the user approves, the selected tools are executed in parallel. This is achieved by dynamically branching the graph to the nodes representing the chosen tools.
 
-2.  **Clarification**: If the agent cannot proceed or has finished its task, it will ask for what you'd like next. This gives you an opportunity to provide a new prompt or guide the agent's next action.
-
-## Structure
-
-1. **Project Setup**:
-   - Adds repository structure and environment configuration
-   - Initialize project with main application file and Poetry configuration
-   - Add dependencies for LangChain, LangGraph, and dotenv support
-
-2. **ReAct Implementation**:
-   - Builds the core agent functionality
-   - Create react.py for ReAct agent implementation 
-   - Add tools and prompt integration
-
-3. **State Management**:
-   - Creates state tracking for the agent
-   - Adds AgentState class to state.py
-   - Implements state management for agent actions and outcomes
-
-4. **Agent Nodes**:
-   - Sets up graph
-   - Adds nodes.py to implement agent reasoning
-   - Creates tool execution logic components
-
-5. **Graph Construction**:
-   - Adds graph generation functionality to main.py
-   - Updates model in react.py for full integration
+### 4. Back to Reasoning
+The results of the tool executions are returned to the agent, which then uses this new information to formulate a final response or decide on the next steps.
 
 ## Environment Variables
 
-Add the following environment variables to your .env file:
+Add the following environment variables to your `.env` file:
 
 ```bash
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -79,12 +68,17 @@ git clone https://github.com/rosiefaulkner/agent-executor.git
 cd agent-executor
 ```
 
-Install dependencies:
+Install dependencies using Poetry:
 
 ```bash
 poetry install
 ```
 
+Run the application:
+
+```bash
+poetry run python main.py
+```
 
 ## Acknowledgements
 
@@ -92,5 +86,3 @@ This project builds upon:
 - [LangGraph](https://langchain-ai.github.io/langgraph/) for agent control flow
 - [LangChain](https://github.com/langchain-ai/langchain) for LLM interactions
 - [ReAct Pattern](https://arxiv.org/abs/2210.03629) for agent reasoning methodology
-
-
