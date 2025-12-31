@@ -78,11 +78,14 @@ def run_interactive_session(app, thread):
         snapshot = app.get_state(thread)
         if snapshot.next:
             user_input = input(
-                f"Do you approve the next step: '{snapshot.next[0]}'? Type 'y' to approve, or provide clarification: "
+                f"Do you approve the next step: '{snapshot.next[0]}'? Type 'y' to approve, 'n' to terminate, or provide clarification: "
             )
             if user_input.strip().lower() == "y":
                 for event in app.stream(None, thread, stream_mode="values"):
                     event["messages"][-1].pretty_print()
+            elif user_input.strip().lower() == "n":
+                print("---SESSION TERMINATED BY USER---")
+                return  # This will exit the function and the program
             else:
                 app.update_state(
                     thread,
@@ -93,8 +96,11 @@ def run_interactive_session(app, thread):
                     event["messages"][-1].pretty_print()
         else:
             clarification = input(
-                "How can I help? Explain what you'd like me to do next:"
+                "Please provide clarification (or type 'exit' to quit): "
             )
+            if clarification.strip().lower() == "exit":
+                print("---SESSION TERMINATED BY USER---")
+                return
             for event in app.stream(
                 {"messages": [HumanMessage(content=clarification)]},
                 thread,
