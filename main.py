@@ -1,18 +1,22 @@
 from typing import TypedDict
 
 from dotenv import load_dotenv
-from langchain_core import messages
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph import END, MessagesState, StateGraph
+from langgraph.checkpoint.sqlite import SqliteSaver
+import sqlite3
 
-from nodes import run_agent_reasoning, tool_node
+from nodes import handle_tool_error, run_agent_reasoning, tool_node
 
 load_dotenv()
 
 AGENT_REASON = "agent_reason"
 ACT = "act"
+ERROR_HANDLER = "error_handler"
 LAST = -1
+
+conn = sqlite3.connect(database="checkpoints.sqlite", check_same_thread=False)
+memory = SqliteSaver(conn)
 
 
 def should_continue(state: MessagesState) -> str:
@@ -36,11 +40,11 @@ flow = StateGraph(MessagesState)
 flow.add_node(AGENT_REASON, run_agent_reasoning)
 flow.set_entry_point(AGENT_REASON)
 flow.add_node(ACT, tool_node)
+flow.add_node(ERROR_HANDLER, handle_tool_error)
 
 flow.add_conditional_edges(AGENT_REASON, should_continue, {END: END, ACT: ACT})
-flow.add_edge(ACT, AGENT_REASON)
-
-memory = MemorySaver()
+flow.add_edge(ACT, ERROR_HANDLER)
+flow.add_edge(ERROR_HANDLER, AGENT_REASON)
 
 app = flow.compile(checkpointer=memory, interrupt_before=[ACT])
 

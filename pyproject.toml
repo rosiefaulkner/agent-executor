@@ -25,7 +25,8 @@ dependencies = [
     "dotenv (>=0.9.9,<0.10.0)",
     "langchain-chroma (>=1.1.0,<2.0.0)",
     "langchain-tavily (>=0.2.16,<0.3.0)",
-    "httpx (>=0.28.1,<0.29.0)"
+    "httpx (>=0.28.1,<0.29.0)",
+    "langgraph-checkpoint-sqlite (>=3.0.1,<4.0.0)"
 ]
 
 
