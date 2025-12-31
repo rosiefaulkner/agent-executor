@@ -1,14 +1,13 @@
 """
 Reasoning engine that decides which tool to call
 """
-from dotenv import load_dotenv
+
 import os
 
-
+from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_tavily import TavilySearch
-
 
 load_dotenv()
 
@@ -26,6 +25,7 @@ def triple(num: float) -> float:
     """
     return num * 3
 
+
 tools = [TavilySearch(max_results=1), triple]
 
 # Get API key and ensure it's set
@@ -41,10 +41,8 @@ model = os.getenv(
     "GEMINI_MODEL", "gemini-2.5-flash-lite"
 )  # Default to lite for higher quota
 
-llm = ChatGoogleGenerativeAI(model=model, temperature=0, google_api_key=api_key).bind_tools(tools)
+llm = ChatGoogleGenerativeAI(
+    model=model, temperature=0, google_api_key=api_key
+).bind_tools(tools)
 
 print(llm)
-
-
-
-    
