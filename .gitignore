@@ -162,3 +162,5 @@ cython_debug/
 *.chroma/
 .vscode/
 .python-version-path
+
+checkpoints.*

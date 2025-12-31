@@ -4,6 +4,7 @@ should be called and if so, identifies which tool to call.
 """
 
 from dotenv import load_dotenv
+from google.api_core.exceptions import ResourceExhausted
 from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.graph import MessagesState
 from langgraph.prebuilt import ToolNode
@@ -25,10 +26,23 @@ def run_agent_reasoning(state: MessagesState) -> MessagesState:
     """
     Run the agent reasoning node
     """
-    response = llm.invoke(
-        [{"role": "system", "content": SYSTEM_MESSAGE}, *state["messages"]]
-    )
-    return {"messages": [response]}
+    try:
+        response = llm.invoke(
+            [{"role": "system", "content": SYSTEM_MESSAGE}, *state["messages"]],
+            config={"request_options": {"timeout": 60}},
+        )
+        return {"messages": [response]}
+    except ResourceExhausted as e:
+        print("\n---API QUOTA EXCEEDED---")
+        print(
+            "You have exceeded your API quota. Please check your plan and billing details."
+        )
+        print(
+            "You can also try setting the GEMINI_MODEL environment variable to a different model."
+        )
+        print(f"Original error: {e}")
+        # Re-raise the exception to stop the application
+        raise
 
 
 def handle_tool_error(state: MessagesState) -> MessagesState:

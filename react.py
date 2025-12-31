@@ -40,5 +40,3 @@ model = os.getenv(
 llm = ChatGoogleGenerativeAI(
     model=model, temperature=0, google_api_key=api_key
 ).bind_tools(tools)
-
-print(llm)
