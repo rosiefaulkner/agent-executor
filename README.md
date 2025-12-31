@@ -3,23 +3,12 @@
 An advanced AI agent that can reason about its actions and execute tools in a controlled flow, following the ReAct pattern with LangGraph's  graph-based architecture.
 
 ```mermaid
----
-config:
-  flowchart:
-    curve: linear
----
-graph LR;
-        __start__([<p>__start__</p>]):::first
-        agent_reason(agent_reason)
-        act(act)
-        __end__([<p>__end__</p>]):::last
-        __start__ --> agent_reason;
-        act --> agent_reason;
-        agent_reason -.-> act;
-        agent_reason -.-> __end__;
-        classDef default fill:#f2f0ff,line-height:1.2
-        classDef first fill-opacity:0
-        classDef last fill:#bfb6fc
+graph TD
+    __start__("Start") --> agent_reason("Agent Reasoning")
+    agent_reason --> human_in_the_loop("Human in the Loop")
+    human_in_the_loop --> act("Take Action")
+    act --> agent_reason
+    agent_reason --> __end__("End")
 ```
 
 ## Implementation Details
@@ -28,6 +17,18 @@ graph LR;
 - **Graph-Based Control Flow**: Uses LangGraph to create sophisticated control flows for AI agents
 - **Tool Integration**: Builds tools that enable operations / interactions with other services (e.g. web search, RAG search via vector store, etc.)
 - **State Management**: Implements proper state handling for complex agent behavior
+
+## Human in the Loop
+
+This agent incorporates a human-in-the-loop (HITL) mechanism for enhanced control and collaboration. This feature allows you to guide and approve the agent's actions before they are taken.
+
+### How it Works
+
+1.  **Action Approval**: When the agent decides to use a tool, the execution is paused. You will be prompted in the command line to approve the tool execution.
+    -   Type `y` to allow the agent to proceed with the tool call.
+    -   Type any other text to provide feedback or clarification to the agent. The agent will take your input into account for its next step.
+
+2.  **Clarification**: If the agent cannot proceed or has finished its task, it will ask for what you'd like next. This gives you an opportunity to provide a new prompt or guide the agent's next action.
 
 ## Structure
 
