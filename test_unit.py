@@ -115,6 +115,70 @@ class TestAgentUnit(unittest.TestCase):
         next_node = main.should_continue(state_with_tool)
         self.assertEqual(next_node, main.ACT)
 
+    @patch("builtins.input")
+    def test_run_interactive_session_approve(self, mock_input):
+        """Test interactive session where user approves the next step"""
+        mock_app = MagicMock()
+        mock_input.return_value = "y"
+
+        # Mock state with next step
+        mock_snapshot = MagicMock()
+        mock_snapshot.next = ("act",)
+        mock_app.get_state.return_value = mock_snapshot
+
+        # Mock stream to return a generator of events
+        mock_message = MagicMock()
+        mock_event = {"messages": [mock_message]}
+        mock_app.stream.return_value = [mock_event]
+
+        initial_input = {"messages": []}
+        thread = {"configurable": {"thread_id": "1"}}
+
+        main.run_interactive_session(mock_app, initial_input, thread)
+
+        # Verify input called with correct prompt
+        mock_input.assert_called_once()
+        args, _ = mock_input.call_args
+        self.assertIn("approve the next step", args[0])
+        self.assertIn("'act'", args[0])
+
+        # Verify stream called twice: once for initial, once for continuation
+        self.assertEqual(mock_app.stream.call_count, 2)
+
+        # Check second call to stream (continuation)
+        args, kwargs = mock_app.stream.call_args_list[1]
+        self.assertIsNone(args[0])  # input is None for continuation
+        self.assertEqual(args[1], thread)
+
+    @patch("builtins.input")
+    def test_run_interactive_session_reject(self, mock_input):
+        """Test interactive session where user provides clarification instead of approving"""
+        mock_app = MagicMock()
+        mock_input.return_value = "use a different tool"
+
+        mock_snapshot = MagicMock()
+        mock_snapshot.next = ("act",)
+        mock_app.get_state.return_value = mock_snapshot
+
+        mock_message = MagicMock()
+        mock_event = {"messages": [mock_message]}
+        mock_app.stream.return_value = [mock_event]
+
+        initial_input = {"messages": []}
+        thread = {"configurable": {"thread_id": "1"}}
+
+        main.run_interactive_session(mock_app, initial_input, thread)
+
+        # Verify update_state called
+        mock_app.update_state.assert_called_once()
+        args, _ = mock_app.update_state.call_args
+        self.assertEqual(args[0], thread)
+        self.assertIsInstance(args[1]["messages"][0], HumanMessage)
+        self.assertEqual(args[1]["messages"][0].content, "use a different tool")
+
+        # Verify stream called twice
+        self.assertEqual(mock_app.stream.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
